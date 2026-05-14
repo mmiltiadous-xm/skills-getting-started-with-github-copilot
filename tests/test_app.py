@@ -36,6 +36,8 @@ def test_unregister_from_activity():
     # Arrange
     activity_name = "Chess Club"
     email = "new_student@mergington.edu"
+    signup_response = client.post(f"/activities/{activity_name}/signup", params={"email": email})
+    assert signup_response.status_code == 200
 
     # Act
     response = client.post(f"/activities/{activity_name}/unregister", params={"email": email})
