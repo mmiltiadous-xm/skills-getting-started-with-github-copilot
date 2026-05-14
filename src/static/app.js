@@ -13,6 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
       // Clear loading message
       activitiesList.innerHTML = "";
 
+      // Clear and rebuild the activity dropdown
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
@@ -20,12 +23,54 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // Build activity card with safe HTML structure
         activityCard.innerHTML = `
-          <h4>${name}</h4>
-          <p>${details.description}</p>
-          <p><strong>Schedule:</strong> ${details.schedule}</p>
+          <h4>${name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</h4>
+          <p>${details.description.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+          <p><strong>Schedule:</strong> ${details.schedule.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
         `;
+
+        // Build participants section using DOM methods to prevent XSS
+        const participantsSection = document.createElement("div");
+        participantsSection.className = "participants-section";
+
+        if (details.participants && details.participants.length > 0) {
+          const title = document.createElement("strong");
+          title.textContent = "Participants:";
+          participantsSection.appendChild(title);
+
+          const list = document.createElement("ul");
+          list.className = "participants-list no-bullets";
+
+          details.participants.forEach(email => {
+            const listItem = document.createElement("li");
+            listItem.className = "participant-item";
+
+            const emailSpan = document.createElement("span");
+            emailSpan.textContent = email;
+            listItem.appendChild(emailSpan);
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "delete-participant-btn";
+            deleteBtn.title = "Unregister";
+            deleteBtn.innerHTML = "&#128465;";
+            deleteBtn.dataset.activity = name;
+            deleteBtn.dataset.email = email;
+
+            listItem.appendChild(deleteBtn);
+            list.appendChild(listItem);
+          });
+
+          participantsSection.appendChild(list);
+        } else {
+          participantsSection.className += " empty";
+          const emptyMsg = document.createElement("em");
+          emptyMsg.textContent = "No participants yet";
+          participantsSection.appendChild(emptyMsg);
+        }
+
+        activityCard.appendChild(participantsSection);
 
         activitiesList.appendChild(activityCard);
 
@@ -35,11 +80,41 @@ document.addEventListener("DOMContentLoaded", () => {
         option.textContent = name;
         activitySelect.appendChild(option);
       });
+
+      // Delegate unregister (delete) button clicks
+      document.querySelectorAll('.delete-participant-btn').forEach(btn => {
+        btn.addEventListener('click', async (event) => {
+          event.preventDefault();
+          const activity = btn.getAttribute("data-activity");
+          const email = btn.getAttribute("data-email");
+          if (!activity || !email) return;
+          btn.disabled = true;
+          btn.innerHTML = "<span style='font-size:14px;'>&#8987;</span>"; // hourglass
+          try {
+            const response = await fetch(`/activities/${encodeURIComponent(activity)}/unregister?email=${encodeURIComponent(email)}`, {
+              method: "POST"
+            });
+            if (response.ok) {
+              fetchActivities();
+            } else {
+              const result = await response.json();
+              btn.disabled = false;
+              btn.innerHTML = "&#128465;";
+              alert(result.detail || "Failed to unregister participant.");
+            }
+          } catch (error) {
+            btn.disabled = false;
+            btn.innerHTML = "&#128465;";
+            alert("Failed to unregister participant.");
+          }
+        });
+      });
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
     }
   }
+  
 
   // Handle form submission
   signupForm.addEventListener("submit", async (event) => {
@@ -62,6 +137,9 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+
+        // Refresh activities list dynamically
+        fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
