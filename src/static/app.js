@@ -13,6 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
       // Clear loading message
       activitiesList.innerHTML = "";
 
+      // Clear and rebuild the activity dropdown
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
+
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
         const activityCard = document.createElement("div");
@@ -20,35 +23,54 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
-        // Build participants list HTML with delete icon and no bullets
-        let participantsHTML = "";
+        // Build activity card with safe HTML structure
+        activityCard.innerHTML = `
+          <h4>${name.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</h4>
+          <p>${details.description.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+          <p><strong>Schedule:</strong> ${details.schedule.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+          <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+        `;
+
+        // Build participants section using DOM methods to prevent XSS
+        const participantsSection = document.createElement("div");
+        participantsSection.className = "participants-section";
+
         if (details.participants && details.participants.length > 0) {
-          participantsHTML = `
-            <div class="participants-section">
-              <strong>Participants:</strong>
-              <ul class="participants-list no-bullets">
-                ${details.participants.map(email => `
-                  <li class="participant-item">${email}
-                    <button class="delete-participant-btn" title="Unregister" data-activity="${name}" data-email="${email}">&#128465;</button>
-                  </li>`).join("")}
-              </ul>
-            </div>
-          `;
+          const title = document.createElement("strong");
+          title.textContent = "Participants:";
+          participantsSection.appendChild(title);
+
+          const list = document.createElement("ul");
+          list.className = "participants-list no-bullets";
+
+          details.participants.forEach(email => {
+            const listItem = document.createElement("li");
+            listItem.className = "participant-item";
+
+            const emailSpan = document.createElement("span");
+            emailSpan.textContent = email;
+            listItem.appendChild(emailSpan);
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "delete-participant-btn";
+            deleteBtn.title = "Unregister";
+            deleteBtn.innerHTML = "&#128465;";
+            deleteBtn.dataset.activity = name;
+            deleteBtn.dataset.email = email;
+
+            listItem.appendChild(deleteBtn);
+            list.appendChild(listItem);
+          });
+
+          participantsSection.appendChild(list);
         } else {
-          participantsHTML = `
-            <div class="participants-section empty">
-              <em>No participants yet</em>
-            </div>
-          `;
+          participantsSection.className += " empty";
+          const emptyMsg = document.createElement("em");
+          emptyMsg.textContent = "No participants yet";
+          participantsSection.appendChild(emptyMsg);
         }
 
-        activityCard.innerHTML = `
-          <h4>${name}</h4>
-          <p>${details.description}</p>
-          <p><strong>Schedule:</strong> ${details.schedule}</p>
-          <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
-          ${participantsHTML}
-        `;
+        activityCard.appendChild(participantsSection);
 
         activitiesList.appendChild(activityCard);
 
@@ -76,9 +98,13 @@ document.addEventListener("DOMContentLoaded", () => {
               fetchActivities();
             } else {
               const result = await response.json();
+              btn.disabled = false;
+              btn.innerHTML = "&#128465;";
               alert(result.detail || "Failed to unregister participant.");
             }
           } catch (error) {
+            btn.disabled = false;
+            btn.innerHTML = "&#128465;";
             alert("Failed to unregister participant.");
           }
         });
